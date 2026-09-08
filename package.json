@@ -1,0 +1,39 @@
+{
+  "name": "food_delivery_backend",
+  "version": "1.0.0",
+  "description": "A production-grade Zomato-style food delivery backend built with Node.js, TypeScript, Express, PostgreSQL, Redis, and Docker.",
+  "main": "index.js",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MohitVerma007/food_delivery_backend.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/MohitVerma007/food_delivery_backend/issues"
+  },
+  "homepage": "https://github.com/MohitVerma007/food_delivery_backend#readme",
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^26.5.0",
+    "@types/pg": "^8.23.1",
+    "tsx": "^4.23.13",
+    "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "argon2": "^0.45.1",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
+    "pg": "^8.23.0",
+    "zod": "^4.5.4"
+  }
+}

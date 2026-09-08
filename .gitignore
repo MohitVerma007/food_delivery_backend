@@ -1,0 +1,4 @@
+node_modules/
+dist/
+.env
+my_github_cmd.txt
