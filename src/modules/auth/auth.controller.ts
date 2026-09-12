@@ -1,5 +1,5 @@
 import { type Request, type Response, type NextFunction } from "express";
-import { registerUser } from "./auth.service.js";
+import { registerUser, getAllUser } from "./auth.service.js";
 
 export const register = async (
   req: Request,
@@ -21,3 +21,20 @@ export const register = async (
 
   }
 };
+
+export const getUsers = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const page = Number(req.query.page) || 1;
+    const limit = Number(req.query.limit) || 10;
+    
+    const data = await getAllUser({page, limit});
+
+    return res.status(200).json(data);
+  } catch(error) {
+    next(error);
+  }
+}
