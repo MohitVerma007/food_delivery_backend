@@ -7,6 +7,43 @@ interface RegisterInput {
   password: string;
 }
 
+interface GetUsersInput {
+  page: number;
+  limit: number;
+}
+
+export const getAllUser = async ({ page, limit}: GetUsersInput) => {
+
+  const offset = (page - 1) * limit;
+
+  const usersResult = await pool.query(
+    `SELECT 
+     id,
+     name,
+     email,
+     role,
+     created_at,
+     updated_at
+    From users
+    ORDER BY created_at DESC
+    LIMIT $1 OFFSET $2`,
+    [limit, offset]
+  );
+
+  const countResult = await pool.query(`SELECT COUNT(*) FROM users`);
+  const total = parseInt(countResult.rows[0].count, 10);
+
+  return {
+    users: usersResult.rows,
+    meta: {
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total/limit),
+    },
+  };
+};
+
 export const registerUser = async (
   input: RegisterInput
 ) => {
