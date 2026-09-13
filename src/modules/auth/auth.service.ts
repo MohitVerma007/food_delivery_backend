@@ -1,5 +1,7 @@
 import argon2 from "argon2";
+import jwt from "jsonwebtoken";
 import { pool } from "../../config/db.js";
+import { env } from "../../config/env.js";
 
 interface RegisterInput {
   name: string;
@@ -86,4 +88,61 @@ export const registerUser = async (
   );
 
   return result.rows[0];
+};
+
+export const loginUser = async(
+  email: string,
+  password: string
+) => {
+
+  const result = await pool.query(
+    `
+    SELECT
+      id,
+      name,
+      email,
+      password_hash,
+      role
+    FROM users
+    WHERE email = $1
+    `,
+    [email]
+  );
+
+
+  const user = result.rows[0];
+
+  if(!user){
+    throw new Error("INVALID_CREDENTIALS");
+  }
+
+  const passwordValid = await argon2.verify(
+    user.password_hash,
+    password
+  )
+
+  if(!passwordValid) {
+    throw new Error("INVALID_CREDENTIALS");
+  }
+
+  const accessToken = jwt.sign(
+    {
+      sub: user.id,
+      role: user.role
+    },
+    env.jwtSecret,
+    {
+      expiresIn: "15m"
+    }
+  );
+
+  return {
+    accessToken,
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role
+    }
+  };
 };
