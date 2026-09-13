@@ -1,10 +1,11 @@
 import { Router } from "express";
 
-import { getUsers, register } from "./auth.controller.js";
+import { getUsers, register, login } from "./auth.controller.js";
 
 import { validate } from "../../middlewares/validate.middleware.js";
 
 import {
+  loginSchema,
   registerSchema
 } from "./auth.schema.js";
 import { authenticate } from "../../middlewares/auth.middleware.js";
@@ -17,6 +18,12 @@ router.post(
   validate(registerSchema),
   register
 );
+
+router.post(
+  "/login",
+  validate(loginSchema),
+  login
+)
 
 router.get("/", authenticate, authorize("ADMIN"), getUsers)
 
