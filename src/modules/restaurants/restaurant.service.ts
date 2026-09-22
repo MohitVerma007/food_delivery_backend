@@ -62,3 +62,29 @@ export const createRestaurant = async (
 
     return result.rows[0]
 }
+
+export const getRestaurants = async(
+    limit: number,
+    offset: number
+) => {
+
+    const result = await pool.query(
+        `
+        SELECT
+            id,
+            name,
+            description,
+            address,
+            latitude,
+            longitude
+        FROM restaurants
+        WHERE is_active = TRUE
+        ORDER BY created_at DESC
+        LIMIT $1
+        OFFSET $2
+        `,
+        [limit, offset] 
+    );
+
+    return result.rows
+}
