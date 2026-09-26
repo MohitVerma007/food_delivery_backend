@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import type { AuthRequest } from "../../middlewares/auth.middleware.js";
-import { createRestaurant, getRestaurants } from "./restaurant.service.js";
+import { createRestaurant, getRestaurantById, getRestaurants, updateRestaurant } from "./restaurant.service.js";
 
 export const createRestaurantController = async (
   req: AuthRequest,
@@ -33,6 +33,45 @@ export const getAllRestaurantController = async (
     return res.status(200).json({
       restaurant,
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getRestaurantByIdController = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { restaurantId } = req.params as { restaurantId: string };
+    const restaurant = await getRestaurantById(restaurantId);
+    
+    if (!restaurant) {
+      return res.status(404).json({ message: "Restaurant not found" });
+    } 
+
+    return res.status(200).json({
+      restaurant,
+    });
+  } catch (error) {
+    next(error);
+  } 
+};
+
+export const updateRestaurantController = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { restaurantId } = req.params as { restaurantId: string };
+    const updatedRestaurant = await updateRestaurant(restaurantId, req.body);
+    
+    if (!updatedRestaurant) {
+      return res.status(404).json({ message: "Restaurant not found" });
+    }
+    return res.status(200).json({ restaurant: updatedRestaurant });
   } catch (error) {
     next(error);
   }
