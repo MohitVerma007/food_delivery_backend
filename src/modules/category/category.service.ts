@@ -150,7 +150,7 @@ export const updateCategory = async (
 
 export const deleteCategory = async (
   categoryId: string
-): Promise<void> => {
+): Promise<{ message: string }> => {
   const existingCategory = await getCategoryById(categoryId);
 
   if (!existingCategory) {
@@ -159,11 +159,21 @@ export const deleteCategory = async (
     throw error;
   }
 
-  await pool.query(
+  const result = await pool.query(
     `
       DELETE FROM categories
       WHERE id = $1
     `,
     [categoryId]
   );
+
+  if (result.rowCount === 0) {
+    const error = new Error("Failed to delete category");
+    (error as any).statusCode = 500;
+    throw error;
+  }
+
+   return {
+    message: "Menu item deleted successfully",
+  };
 };

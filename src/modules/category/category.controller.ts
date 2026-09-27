@@ -34,7 +34,7 @@ export const getCategoryByIdController = async (
 };
 
 
-export const getCategoriesController = async (
+export const getAllCategoriesController = async (
   req: Request,
   res: Response,
   next: NextFunction
@@ -66,3 +66,20 @@ export const updateCategoryController = async (
         next(error);
     }
 }
+
+export const deleteCategoryController = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+) => {
+    try {
+        const { categoryId } = req.params as { categoryId: string };
+        const deletedCategory = await deleteCategory(categoryId);
+        if (!deletedCategory) {
+            return res.status(404).json({ message: 'Category not found' });
+        }
+        res.json(deletedCategory);
+    } catch (error) {
+        next(error);
+    } 
+  }

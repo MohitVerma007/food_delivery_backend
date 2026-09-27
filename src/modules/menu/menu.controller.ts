@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 import type { AuthRequest } from '../../middlewares/auth.middleware.js';
-import { createMenu, deleteMenu, updateMenu, getMenuItemById, getMenuItemsByRestaurantId} from './menu.service.js';
+import { createMenu, deleteMenu, updateMenu, getMenuItemById, getRestaurantMenu} from './menu.service.js';
 
 export const createMenuController = async (
   req: AuthRequest,
@@ -35,19 +35,18 @@ export const getMenuItemByIdController = async (
     }
 };
 
-export const getMenuItemsByRestaurantIdController = async (
+export const getRestaurantMenuController = async (
     req: AuthRequest,
     res: Response,
     next: NextFunction
 ) => {
     try {
         const { restaurantId } = req.params as { restaurantId: string };
-        const menuItems = await getMenuItemsByRestaurantId(restaurantId);
+        const menuItems = await getRestaurantMenu(restaurantId);
         res.status(200).json(menuItems);
     } catch (error) {
         next(error);
     }
-
 };
 
 export const updateMenuController = async (
@@ -56,7 +55,7 @@ export const updateMenuController = async (
     next: NextFunction
 ) => {
     try {
-        const { menuItemId } = req.params as { menuItemId: string };
+        const { menuItemId } = req.params as { menuItemId: string };  
         const updatedMenuItem = await updateMenu(menuItemId, req.body);
         res.status(200).json(updatedMenuItem);
     } catch (error) {
