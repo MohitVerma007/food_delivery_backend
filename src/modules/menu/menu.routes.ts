@@ -8,10 +8,10 @@ import { createMenuController, getMenuItemByIdController, getRestaurantMenuContr
 const menuItemRouter = Router();
 
 
-menuItemRouter.post('/', authenticate, authorize("ADMIN", "RESTAURANT_OWNER"), validate(createMenuItemSchema), createMenuController);
-menuItemRouter.get('/:menuItemId', authenticate, getMenuItemByIdController);
+menuItemRouter.post('/create/:restaurantId', authenticate, authorize("ADMIN", "RESTAURANT_OWNER"), validate(createMenuItemSchema), createMenuController);
+menuItemRouter.get('/getbyid/:menuItemId', authenticate, getMenuItemByIdController);
 menuItemRouter.get('/restaurant/:restaurantId', authenticate, getRestaurantMenuController);
-menuItemRouter.put('/:menuItemId', authenticate, authorize("ADMIN", "RESTAURANT_OWNER"), validate(createMenuItemSchema), updateMenuController);
-menuItemRouter.delete('/:menuItemId', authenticate, authorize("ADMIN", "RESTAURANT_OWNER"), deleteMenuController);
+menuItemRouter.put('/update/:menuItemId', authenticate, authorize("ADMIN", "RESTAURANT_OWNER"), validate(createMenuItemSchema), updateMenuController);
+menuItemRouter.delete('/delete/:menuItemId', authenticate, authorize("ADMIN", "RESTAURANT_OWNER"), deleteMenuController);
 
 export default menuItemRouter;

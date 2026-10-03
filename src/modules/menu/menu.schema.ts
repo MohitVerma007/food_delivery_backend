@@ -5,13 +5,13 @@ export const createMenuItemSchema = z.object({
   description: z.string().trim().max(1000).optional(),
   
   // Enforces positive integer (e.g., 24900 for ₹249.00)
-  pricePaise: z.number().int("Price in paise must be an integer").min(0, "Price cannot be negative"),
+  price_paise: z.number().int("Price in paise must be an integer").min(0, "Price cannot be negative"),
   
   // UUID validation for cross-referencing categories
-  categoryId: z.uuid("Invalid Category ID").optional(),
+  category_id: z.uuid("Invalid Category ID").optional(),
   
-  isAvailable: z.boolean().optional().default(true),
-  imageUrl: z.url("Invalid image URL").optional()
+  is_available: z.boolean().optional().default(true),
+  image_url: z.url("Invalid image URL").optional()
 });
 
 export type CreateMenuItemInput = z.infer<typeof createMenuItemSchema>;
