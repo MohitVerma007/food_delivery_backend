@@ -10,7 +10,7 @@ export const updateCartItemSchema = z.object({
 });
 
 export const cartItemParamsSchema = z.object({
-    itemId: z.string().uuid("Invalid cart item ID ")
+    itemId: z.uuid("Invalid cart item ID ")
 });
 
 

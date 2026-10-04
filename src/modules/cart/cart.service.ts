@@ -80,11 +80,11 @@ export const getCart = async (userId: string) => {
             ci.id AS cart_item_id,
             ci.quantity,
             mi.id AS menu_item_id,
-            mi.name AS menu_item_name
-            mi.price_paisa,
+            mi.name AS menu_item_name,
+            mi.price_paise,
             mi.is_available
         FROM carts c
-        JOIN restaurant r ON r.id = c.restaurant_id
+        JOIN restaurants r ON r.id = c.restaurant_id
         LEFT JOIN cart_items ci ON ci.cart_id = c.id
         LEFT JOIN menu_items mi ON mi.id = ci.menu_item_id
         WHERE c.user_id = $1
