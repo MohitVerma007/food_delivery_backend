@@ -25,6 +25,6 @@ router.post(
   login
 )
 
-router.get("/", authenticate,  getUsers)
+router.get("/",  getUsers)
 
 export default router;
