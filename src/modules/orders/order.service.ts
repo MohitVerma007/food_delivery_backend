@@ -1,5 +1,6 @@
 import crypto from "crypto";
-import { pool } from '../../config/db.js';
+import { pool } from "../../config/db.js";
+import { error } from 'node:console';
 
 export interface CreateOrderInput {
   addressId: string;
@@ -12,7 +13,6 @@ export const createOrderService = async (
   idempotencyKey: string,
   input: CreateOrderInput
 ) => {
-  // 1. Calculate SHA-256 Hash of Request Body
   const requestHash = crypto
     .createHash("sha256")
     .update(JSON.stringify(input))
@@ -23,7 +23,7 @@ export const createOrderService = async (
   try {
     await client.query("BEGIN");
 
-    // 2. Check Existing Idempotency Key in DB with Row Lock (FOR UPDATE)
+    // 1. Lock/Reserve Idempotency Key upfront via UPSERT pattern
     const keyCheckResult = await client.query(
       `
       SELECT status, request_hash, response_code, response_body 
@@ -37,15 +37,13 @@ export const createOrderService = async (
     if (keyCheckResult.rows.length > 0) {
       const record = keyCheckResult.rows[0];
 
-      // Payload Mismatch Check
       if (record.request_hash !== requestHash) {
         await client.query("ROLLBACK");
-        const error = new Error("IDEMPOTENCY_PAYLOAD_MISMATCH");
-        (error as any).statusCode = 422;
+        const error: any = new Error("IDEMPOTENCY_PAYLOAD_MISMATCH");
+        error.statusCode = 422;
         throw error;
       }
 
-      // If already processed successfully
       if (record.status === "COMPLETED") {
         await client.query("COMMIT");
         return {
@@ -54,36 +52,34 @@ export const createOrderService = async (
         };
       }
 
-      // If still processing
       if (record.status === "IN_PROGRESS") {
         await client.query("ROLLBACK");
-        const error = new Error("ORDER_PROCESSING_IN_PROGRESS");
-        (error as any).statusCode = 409;
+        const error: any = new Error("ORDER_PROCESSING_IN_PROGRESS");
+        error.statusCode = 409;
         throw error;
       }
+    } else {
+      // Insert 'IN_PROGRESS' record safely inside transaction
+      await client.query(
+        `
+        INSERT INTO idempotency_keys (user_id, idempotency_key, request_hash, status)
+        VALUES ($1, $2, $3, 'IN_PROGRESS')
+        `,
+        [userId, idempotencyKey, requestHash]
+      );
     }
 
-    // 3. Insert 'IN_PROGRESS' Record with request_hash
-    await client.query(
-      `
-      INSERT INTO idempotency_keys (
-        user_id, 
-        idempotency_key, 
-        request_hash, 
-        status
-      )
-      VALUES ($1, $2, $3, 'IN_PROGRESS')
-      `,
-      [userId, idempotencyKey, requestHash]
-    );
-
-    // 4. Fetch Cart & Items
+    // 2. Fetch Cart & Validate
     const cartResult = await client.query(
       `SELECT id, restaurant_id FROM carts WHERE user_id = $1`,
       [userId]
     );
     const cart = cartResult.rows[0];
-    if (!cart) throw new Error("CART_EMPTY");
+    if (!cart) {
+      const err: any = new Error("CART_EMPTY");
+      err.statusCode = 400;
+      throw err;
+    }
 
     const cartItemsResult = await client.query(
       `
@@ -100,12 +96,20 @@ export const createOrderService = async (
       [cart.id]
     );
     const cartItems = cartItemsResult.rows;
-    if (cartItems.length === 0) throw new Error("CART_EMPTY");
+    if (cartItems.length === 0) {
+      const err: any = new Error("CART_EMPTY");
+      err.statusCode = 400;
+      throw err;
+    }
 
-    // 5. Total Calculations
+    // 3. Price Calculation & Availability Check
     let subtotalPaise = 0;
     for (const item of cartItems) {
-      if (!item.is_available) throw new Error(`ITEM_UNAVAILABLE:${item.name}`);
+      if (!item.is_available) {
+        const err: any = new Error(`ITEM_UNAVAILABLE:${item.name}`);
+        err.statusCode = 400;
+        throw err;
+      }
       subtotalPaise += Number(item.price_paise) * item.quantity;
     }
 
@@ -113,7 +117,7 @@ export const createOrderService = async (
     const taxPaise = Math.round(subtotalPaise * 0.05);
     const totalAmountPaise = subtotalPaise + deliveryFeePaise + taxPaise;
 
-    // 6. Insert Order
+    // 4. Create Order
     const orderResult = await client.query(
       `
       INSERT INTO orders (
@@ -138,7 +142,7 @@ export const createOrderService = async (
     );
     const createdOrder = orderResult.rows[0];
 
-    // 7. Insert Snapshots
+    // 5. Create Snapshot Items
     for (const item of cartItems) {
       await client.query(
         `
@@ -158,8 +162,25 @@ export const createOrderService = async (
       );
     }
 
-    // 8. Delete Cart
+    // 6. Clear Cart
     await client.query(`DELETE FROM carts WHERE id = $1`, [cart.id]);
+
+    // 7. Write Outbox Event (Transactional Event Pattern)
+    await client.query(
+      `
+      INSERT INTO outbox_events (event_type, aggregate_id, payload)
+      VALUES ($1, $2, $3)
+      `,
+      [
+        "ORDER_CREATED",
+        createdOrder.id,
+        JSON.stringify({
+          orderId: createdOrder.id,
+          userId,
+          restaurantId: cart.restaurant_id,
+        }),
+      ]
+    );
 
     const responsePayload = {
       orderId: createdOrder.id,
@@ -168,7 +189,7 @@ export const createOrderService = async (
       createdAt: createdOrder.created_at,
     };
 
-    // 9. Update Idempotency Table Status to COMPLETED
+    // 8. Update Idempotency Record to COMPLETED
     await client.query(
       `
       UPDATE idempotency_keys
@@ -190,17 +211,180 @@ export const createOrderService = async (
   } catch (error) {
     await client.query("ROLLBACK");
 
-    // Execution fail hone par IN_PROGRESS record delete kar do taaki client retry kar sake
-    await pool.query(
-      `
-      DELETE FROM idempotency_keys 
-      WHERE user_id = $1 AND idempotency_key = $2 AND status = 'IN_PROGRESS'
-      `,
-      [userId, idempotencyKey]
-    );
+    // Clean up IN_PROGRESS key safely
+    try {
+      await pool.query(
+        `
+        DELETE FROM idempotency_keys 
+        WHERE user_id = $1 AND idempotency_key = $2 AND status = 'IN_PROGRESS'
+        `,
+        [userId, idempotencyKey]
+      );
+    } catch (cleanupErr) {
+      console.error("Failed to clean up idempotency key:", cleanupErr);
+    }
 
     throw error;
   } finally {
     client.release();
   }
 };
+
+
+export const mycreateOrderService = async(
+  userId: string,
+  idempotencyKey: string,
+  input: CreateOrderInput
+) => {
+
+
+  // create request hash using json body
+  const requestHash = crypto
+    .createHash("sha256")
+    .update(JSON.stringify(input))
+    .digest("hex")
+
+  //Separate Client for handling Transaction
+  const client = await pool.connect();
+
+  try { 
+    await client.query("BEGIN")  // Transation Start
+
+    // 1. Lock/ Reserve Idempotency Key upfront via UPSERT pattern 
+          // ( FOR UPDATE = Row-Level Lock (Pessimistic Lock))
+
+    const keyCheckResult = await client.query(
+      `
+      SELECT status, request_hash, response_code, response_body
+      FROM idempotency_keys
+      WHERE user_id = $1 AND idempotency_key = $2
+      FOR UPDATE
+      `,
+      [userId, idempotencyKey]
+    );
+
+    if (keyCheckResult.rows.length > 0) {
+      const record = keyCheckResult.rows[0];
+
+      // Checking req hash like if attacker get idempotency key 
+      if(record.request_hash !== requestHash){
+        await client.query("ROLLBACK");
+        const error: any = new Error("IDEMPOTENCY_PAYLOAD_MISMATCH");
+        //422 Unprocessable Entity (Validation FailureBusiness rule mismatch)
+        error.statusCode = 422; 
+        throw error;
+      }
+
+
+      // If process already completed then just return the response
+      if(record.status === "COMPLETED"){
+        await client.query("COMMIT");
+        return {
+          statusCode: record.response_code,
+          body: record.response_body,
+        };
+      }
+
+      // Handling duplicate request while processing
+      if(record.status === "IN_PROGRESS") {
+        await client.query("ROLLBACK");
+        const error: any = new Error("ORDER_PROCESSING_IN_PROGRESS");
+        error.statusCode = 409;
+        throw error;
+      }
+
+    } else {
+      // Insert "IN_PROGRESS" record safely inside transaction
+      await client.query(
+        `
+        INSERT INTO idempotency_keys (user_id, idempotency_key, request_hash, status)
+        VALUES ($1, $2, $3, $4, 'IN_PROGRESS')
+        `,
+        [userId, idempotencyKey, requestHash]
+      );
+    }
+
+
+
+    // 2. Fetch Cart & Validate
+    const cartResult =await client.query(
+      `SELECT id, restaurant_id FROM carts WHERE user_id = $1`,
+      [userId]
+    );
+    const cart = cartResult.rows[0];
+
+    if(!cart) {
+      const err: any = new Error("CART_EMPTY");
+      err.statusCode = 400;
+      throw err;
+    }
+
+    const cartItemResult = await client.query(
+      `
+      SELECT
+        ci.menu_item_id,
+        ci.quantity,
+        mi.name,
+        mi.price_paise,
+        mi.is_available
+      FROM cart_items ci
+      JOIN menu_items mi ON mi.id = ci.menu_item_id
+      WHERE ci.cart_id = $1
+      `,
+      [cart.id]
+    );
+
+    const cartItems = cartItemResult.rows;
+    if(cartItems.length === 0) {
+      const error: any = new Error("CART_EMPTY");
+      error.statusCode = 400;
+      throw error;
+    }
+
+
+    // 3. Price Calculation & Availability Check
+    let subtotal_paise = 0;
+    for (const item of cartItems){
+      if (!item.is_available) {
+        const err: any = new Error(`ITEM_UNAVAILABLE: ${item.name}`);
+        err.statusCode = 400;
+        throw err;
+      }
+      subtotal_paise += Number(item.price_paise) * item.quantity;
+    }
+
+
+    const deliveryFeePaise = 4000;
+    const taxPaise  = Math.round(subtotal_paise * 0.05);
+    const totalAmountPaise = subtotal_paise + deliveryFeePaise + taxPaise;
+
+
+    // 4. Create Order
+
+    
+  } catch (error) {
+    
+  }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+}
