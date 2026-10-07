@@ -3,7 +3,7 @@ import { pool } from "../../config/db.js";
 import { error } from 'node:console';
 
 export interface CreateOrderInput {
-  addressId: string;
+  address: string;
   paymentMethod: "ONLINE" | "COD";
   notes?: string;
 }
@@ -131,7 +131,7 @@ export const createOrderService = async (
       [
         userId,
         cart.restaurant_id,
-        input.addressId,
+        input.address,
         subtotalPaise,
         taxPaise,
         deliveryFeePaise,
@@ -359,11 +359,127 @@ export const mycreateOrderService = async(
     const totalAmountPaise = subtotal_paise + deliveryFeePaise + taxPaise;
 
 
-    // 4. Create Order
+    // 4. Create 
+    
+    const orderResult = await client.query(
+        `
+        INSERT INTO orders (
+          user_id, restaurant_id, delivery_address, status,
+          subtotal_paise, tax_paise, delivery_fee_paise, total_paise,
+          payment_method, notes        
+        )
+        VALUES ($1, $2, $3, 'PENDING_PAYMENT', $4, $5, $6, $7, $8, $9)
+        RETURNING id, status, total_paise, created_at
+        `,
+        [
+          userId,
+          cart.restaurant_id,
+          input.address,
+          subtotal_paise,
+          taxPaise,
+          deliveryFeePaise,
+          totalAmountPaise,
+          input.paymentMethod,
+          input.notes ?? null,
+        ]
+    );
 
+    const createdOrder = orderResult.rows[0];
+
+
+    // 5. Create Snapshot Items
+    for ( const item of cartItems){
+      await client.query(
+        `
+        INSERT INTO order_items (
+        order_id, menu_item_id, item_name, unit_price_paise, quantity, total_price_paise    
+      )
+        VALUES ($1, $2, $3, $4, $5, $6)
+        `,
+        [
+          createdOrder.id,
+          item.menu_item_id,
+          item.name,
+          item.price_paise,
+          item.quantity,
+          Number(item.price_paise) * item.quantity,
+        ]
+      )
+    }
+
+    // 6. Clear Cart
+    await client.query(`DELETE FROM carts WHERE id = $1`, [cart.id]);
+
+
+    // 7. Write Outbox Event (Transactional Event Pattern)
+    await client.query(
+      `
+      INSERT INTO outbox_events (event_type, aggregate_id, payload)
+      VALUES ($1, $2, $3)
+      `,
+      [
+        "ORDER_CREATED",
+        createdOrder.id,   // aggregate_id is main resource id
+        JSON.stringify({    // payload contain all required data for other services without calling order records
+          orderId: createdOrder.id,
+          userId,
+          restaurantId: cart.restaurant_id,
+        }),
+      ]
+    );
+
+
+    const responsePayload = {
+      orderId: createdOrder.id,
+      status: createdOrder.status,
+      totalPaise: createdOrder.total_paise,
+      createdAt: createdOrder.created_at,
+    }
+
+
+    // 8. Update Idempotency Record to Completed
+    await client.query(
+      `
+      UPDATE idempotency_keys
+      SET status = 'COMPLETED',
+          response_code = 201,
+          response_body = $1,
+          updated_at = NOW()
+      WHERE user_id = $2 AND idempotency_key = $3
+      `,
+      [JSON.stringify(responsePayload), userId, idempotencyKey]
+    );
+
+    await client.query("COMMIT");
+
+    return {
+      statusCode: 201,
+      body: responsePayload,
+    };
     
   } catch (error) {
-    
+
+    // ** HERE We ROLLBACK Everything if any failure occur during transaction
+    await client.query("ROLLBACK")
+
+    try {
+
+      // Transaction rollback hone ke baad client connection unstable ho sakta hai. Isliye fresh connection (pool.query) use kiya taaki cleanup guarantee ke saath execute ho aur main catch block interrupt na ho.
+      
+      await pool.query(
+        `
+        DELETE FROM idempotency_keys
+        WHERE user_id = $1 AND idempotency_key = $2 AND status = 'IN_PROGRESS'
+        `,
+        [userId, idempotencyKey]
+      );
+    } catch (cleanupErr) {
+        console.error("Failed to clean up idempotency key:", cleanupErr);
+    }
+
+    throw error;
+  } finally {
+    client.release();
   }
 
 
