@@ -7,6 +7,7 @@ import categoryRoutes from "../modules/category/category.routes.js";
 import menuRoutes from "../modules/menu/menu.routes.js";
 import cartRouter from "../modules/cart/cart.routes.js";
 import orderRouter from "../modules/orders/order.routes.js"
+import paymentRouter from "../modules/payments/payment.routes.js";
 
 const router = Router();
 
@@ -16,5 +17,6 @@ router.use("/category", categoryRoutes);
 router.use("/menu", menuRoutes);
 router.use("/cart", cartRouter)
 router.use("/order", orderRouter)
+router.use("/payment", paymentRouter);
 
 export default router;

@@ -250,3 +250,75 @@ export const mycreateOrderService = async (
     client.release();
   }
 };
+
+export const getOrderServiceById = async (userId: string, orderId: string) => {
+
+  try {
+    const orderResult = await pool.query(
+      `
+      SELECT 
+        id, user_id, restaurant_id, delivery_address, status,
+        subtotal_paise, tax_paise, delivery_fee_paise, total_paise,
+        payment_method, notes, created_at, updated_at
+      FROM orders
+      WHERE id = $1 AND user_id = $2
+      `,
+      [orderId, userId]
+    );
+    const order = orderResult.rows[0];
+
+    if (!order) {
+      const err: any = new Error("ORDER_NOT_FOUND");
+      err.statusCode = 404;
+      throw err;
+    }
+
+    const itemsResult = await pool.query(
+      `
+      SELECT 
+        menu_item_id, item_name, unit_price_paise, quantity, total_price_paise
+      FROM order_items
+      WHERE order_id = $1
+      `,
+      [orderId]
+    );
+    const items = itemsResult.rows;
+    return { ...order, items };
+  } catch (error) {
+    throw error;
+  } 
+};
+
+export const getAllOrders = async (userId: string) => {
+  try {
+    const ordersResult = await pool.query(
+      `
+      SELECT 
+        id, user_id, restaurant_id, delivery_address, status,
+        subtotal_paise, tax_paise, delivery_fee_paise, total_paise,
+        payment_method, notes, created_at, updated_at
+      FROM orders
+      WHERE user_id = $1
+      ORDER BY created_at DESC
+      `,
+      [userId]
+    );
+    const orders = ordersResult.rows;
+
+    for (const order of orders) {
+      const itemsResult = await pool.query(
+        `
+        SELECT 
+          menu_item_id, item_name, unit_price_paise, quantity, total_price_paise
+        FROM order_items
+        WHERE order_id = $1
+        `,
+        [order.id]
+      );
+      order.items = itemsResult.rows;
+    }
+    return orders;
+  } catch (error) {
+    throw error;
+  }
+};

@@ -29,6 +29,15 @@ export const errorHandler = (
         })
     }
 
+    if (typeof error.statusCode === "number") {
+        return res.status(error.statusCode).json({
+            error: {
+                code: error.message,
+                message: error.message,
+            }
+        });
+    }
+
     return res.status(500).json({
         error: {
             code: "INTERVAL_SERVER_ERROR",

@@ -4,16 +4,20 @@ import type { AddCartItemInput, UpdateCartItemInput, CartItemParamInput } from '
 export const addCartItem = async (userId: string, input: AddCartItemInput) => {
     const { menuItemId, quantity } = input;
 
-    // Step 1: Check if the menu item exists and is active
-    const menuItemResult = await pool.query(
-        `SELECT id FROM menu_items WHERE id = $1 AND is_active = true`,
+    // Step 1: Check if the menu item exists and is available
+    const menuItemResult = await pool.query<{
+        id: string;
+        restaurant_id: string;
+        is_available: boolean;
+    }>(
+        `SELECT id, restaurant_id, is_available FROM menu_items WHERE id = $1`,
         [menuItemId]
     );
 
     const menuItem = menuItemResult.rows[0];
 
     if (!menuItem) {
-        const error = new Error('Menu item not found or is inactive');
+        const error = new Error('Menu item not found');
         (error as Error & { statusCode?: number }).statusCode = 404;
         throw error;
     }
@@ -56,7 +60,7 @@ export const addCartItem = async (userId: string, input: AddCartItemInput) => {
         VALUES ($1, $2, $3)
         ON CONFLICT (cart_id, menu_item_id)
         DO UPDATE SET
-            quantity = cart_items.quantity + EXCLUDED.quantity
+            quantity = cart_items.quantity + EXCLUDED.quantity,
             updated_at = NOW()
         RETURNING id, cart_id, menu_item_id, quantity, updated_at
         `,
