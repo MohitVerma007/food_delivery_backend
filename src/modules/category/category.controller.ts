@@ -44,7 +44,10 @@ export const getAllCategoriesController = async (
     const limit = Math.max(1, parseInt(req.query.limit as string, 10) || 20);
     const offset = Math.max(0, parseInt(req.query.offset as string, 10) || 0); 
     const categories = await getCategories(restaurantId, limit, offset);
-    res.json(categories);
+    res.json({
+      success: true,
+      data: categories
+    });
   } catch (error) {
     next(error);
   }

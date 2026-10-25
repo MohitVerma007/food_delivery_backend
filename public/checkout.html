@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Razorpay Test Payment</title>
+
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+
+  <style>
+    body {
+      max-width: 600px;
+      margin: 60px auto;
+      padding: 0 20px;
+      font-family: Arial, sans-serif;
+      color: #222;
+    }
+
+    button {
+      padding: 12px 20px;
+      border: 0;
+      border-radius: 6px;
+      background: #2563eb;
+      color: white;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      background: #888;
+      cursor: not-allowed;
+    }
+
+    pre {
+      overflow-x: auto;
+      padding: 16px;
+      background: #f3f4f6;
+      border-radius: 6px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Razorpay Test Payment</h1>
+  <p>Amount: ₹1,484.80</p>
+
+  <button id="pay-button">Pay with Razorpay</button>
+
+  <h2>Result</h2>
+  <pre id="result">Payment abhi start nahi hui.</pre>
+
+  <script>
+    const paymentDetails = {
+      key: "rzp_test_TrjLPIGaJJDP7p",
+      amount: 148480,
+      currency: "INR",
+      order_id: "order_TsAfXi4t4zpDOo"
+    };
+
+    const payButton = document.getElementById("pay-button");
+    const result = document.getElementById("result");
+
+    payButton.addEventListener("click", () => {
+      if (!window.Razorpay) {
+        result.textContent =
+          "Razorpay Checkout load nahi hua. Internet connection check karke page reload karein.";
+        return;
+      }
+
+      payButton.disabled = true;
+      result.textContent = "Razorpay Checkout khul raha hai...";
+
+      const options = {
+        key: paymentDetails.key,
+        amount: paymentDetails.amount,
+        currency: paymentDetails.currency,
+        name: "Food Delivery",
+        description: "Test order payment",
+        order_id: paymentDetails.order_id,
+
+        handler: function (response) {
+          result.textContent =
+            "Checkout response mila. Iska matlab payment browser se submit hui hai; " +
+            "backend par payment confirm hone ke liye webhook verification zaroori hai.\n\n" +
+            JSON.stringify(response, null, 2);
+
+          console.log("Razorpay checkout response:", response);
+          payButton.disabled = false;
+        },
+
+        modal: {
+          ondismiss: function () {
+            result.textContent = "Checkout band kar diya gaya.";
+            payButton.disabled = false;
+          }
+        },
+
+        theme: {
+          color: "#2563eb"
+        }
+      };
+
+      const checkout = new Razorpay(options);
+
+      checkout.on("payment.failed", function (response) {
+        result.textContent =
+          "Payment fail hui:\n\n" +
+          JSON.stringify(response.error, null, 2);
+
+        console.error("Razorpay payment failed:", response.error);
+        payButton.disabled = false;
+      });
+
+      checkout.open();
+    });
+  </script>
+</body>
+</html>

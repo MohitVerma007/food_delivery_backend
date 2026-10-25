@@ -7,7 +7,7 @@ import { createCategoryController, deleteCategoryController, getAllCategoriesCon
 
 const categoryRouter = Router();
 
-categoryRouter.post('/create/:restaurantId', authenticate, authorize("ADMIN", "RESTAURANT_OWNER"), validate(createCategorySchema), createCategoryController);
+categoryRouter.post('/create/:restaurantId', authenticate, authorize("ADMIN", "RESTAURANT_OWNER", "CUSTOMER"), validate(createCategorySchema), createCategoryController);  // Customer only for testing 
 categoryRouter.get('/getall/:restaurantId', authenticate, getAllCategoriesController);
 categoryRouter.get('/getbyid/:categoryId', authenticate, getCategoryByIdController);
 categoryRouter.put('/update/:categoryId', authenticate, authorize("ADMIN", "RESTAURANT_OWNER"), validate(createCategorySchema), updateCategoryController);
