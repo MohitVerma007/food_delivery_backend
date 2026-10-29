@@ -60,6 +60,18 @@ export const paymentWebhookController = async (
 ) => {
   try {
     const signature = req.header("X-Razorpay-Signature");
+    
+    
+    const webhookData = req.body;
+
+  // Jo bhi data webhook se aayega woh yahan print ho jayega
+  console.log('Webhook received:', webhookData);
+
+  // Service ko success response bhejna zaroori hai
+  // res.status(200).json({ status: 'success', message: 'Webhook received successfully' });
+
+
+    console.log("Signature from Razorpay:", signature);
 
     if (!signature) {
       return res.status(400).json({
@@ -109,7 +121,7 @@ export const paymentWebhookController = async (
       payload?: {
         payment?: {
           entity?: {
-            id?: string;
+            order_id?: string;
             amount?: number;
           };
         };
@@ -132,7 +144,7 @@ export const paymentWebhookController = async (
     }
 
     const providerEventId = req.header("X-Razorpay-Event-Id");
-    const providerPaymentId = eventData.payload?.payment?.entity?.id;
+    const providerPaymentId = eventData.payload?.payment?.entity?.order_id;
     const webhookAmountPaise = eventData.payload?.payment?.entity?.amount;
 
     if (
@@ -147,6 +159,12 @@ export const paymentWebhookController = async (
         },
       });
     }
+
+    console.log(`Processing payment webhook:
+      Event ID: ${providerEventId}
+      Payment ID: ${providerPaymentId}
+      Amount (paise): ${webhookAmountPaise}
+    `);
 
     await handlePaymentSuccess(
       "RAZORPAY",

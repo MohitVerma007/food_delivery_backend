@@ -1,6 +1,34 @@
 import type { Request, Response, NextFunction } from "express";
 import type { AuthRequest } from "../../middlewares/auth.middleware.js";
-import { createRestaurant, getRestaurantById, getRestaurants, updateRestaurant } from "./restaurant.service.js";
+import { updateRestaurantOrder,createRestaurant, getRestaurantById, getRestaurants, updateRestaurant } from "./restaurant.service.js";
+
+export const restaurantOrderAction = (
+  action: "ACCEPT" | "REJECT" | "PREPARING" | "READY"
+) => {
+  return async (
+    req: AuthRequest,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const { restaurantId } = req.params as { restaurantId: string };
+      const { orderId } = req.params as { orderId: string };
+      const { reason } = req.body;
+
+      const order = await updateRestaurantOrder(
+        req.user!.id,
+        restaurantId,
+        orderId,
+        action,
+        reason
+      );
+
+      return res.status(200).json({ order });
+    } catch (error) {
+      next(error);
+    }
+  };
+};
 
 export const createRestaurantController = async (
   req: AuthRequest,
