@@ -16,6 +16,9 @@ export const verifyWebhookSignature = (
     .digest();
   const receivedSignature = Buffer.from(signature, "hex");
 
+  console.log("Expected Signature:", expectedSignature.toString("hex"));
+  console.log("Received Signature:", receivedSignature.toString("hex"));
+
   return (
     expectedSignature.length === receivedSignature.length &&
     crypto.timingSafeEqual(expectedSignature, receivedSignature)

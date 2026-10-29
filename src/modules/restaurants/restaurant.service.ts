@@ -1,6 +1,148 @@
 import { pool } from "../../config/db.js";
 import type { CreateRestaurantInput, Restaurant } from "./restarurant.interface.js";
 
+type RestaurantAction =
+  | "ACCEPT"
+  | "REJECT"
+  | "PREPARING"
+  | "READY";
+
+const transitions = {
+  ACCEPT: {
+    from: "CONFIRMED",
+    to: "RESTAURANT_ACCEPTED",
+    event: "RESTAURANT_ORDER_ACCEPTED"
+  },
+  REJECT: {
+    from: "CONFIRMED",
+    to: "CANCELLED",
+    event: "RESTAURANT_ORDER_REJECTED"
+  },
+  PREPARING: {
+    from: "RESTAURANT_ACCEPTED",
+    to: "PREPARING",
+    event: "ORDER_PREPARING"
+  },
+  READY: {
+    from: "PREPARING",
+    to: "READY_FOR_PICKUP",
+    event: "ORDER_READY_FOR_PICKUP"
+  }
+} as const;
+
+
+export const updateRestaurantOrder = async (
+  userId: string,
+  restaurantId: string,
+  orderId: string,
+  action: RestaurantAction,
+  reason?: string
+) => {
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    // 1. Verify restaurant ownership
+    const ownerResult = await client.query(
+      `
+      SELECT id
+      FROM restaurants
+      WHERE id = $1
+        AND owner_id = $2
+      `,
+      [restaurantId, userId]
+    );
+
+    if (ownerResult.rowCount === 0) {
+      throw new Error("RESTAURANT_ACCESS_DENIED");
+    }
+
+    // 2. Lock the order while processing
+    const orderResult = await client.query(
+      `
+      SELECT id, status
+      FROM orders
+      WHERE id = $1
+        AND restaurant_id = $2
+      FOR UPDATE
+      `,
+      [orderId, restaurantId]
+    );
+
+    const order = orderResult.rows[0];
+
+    if (!order) {
+      throw new Error("ORDER_NOT_FOUND");
+    }
+
+    const transition = transitions[action];
+
+    // 3. Validate state transition
+    if (order.status !== transition.from) {
+      throw new Error("INVALID_ORDER_TRANSITION");
+    }
+
+    // 4. Update order
+    const updateResult = await client.query(
+      `
+      UPDATE orders
+      SET
+        status = $1,
+        cancellation_reason = $2,
+        updated_at = NOW()
+      WHERE id = $3
+        AND restaurant_id = $4
+        AND status = $5
+      RETURNING id, status, updated_at
+      `,
+      [
+        transition.to,
+        action === "REJECT" ? reason : null,
+        orderId,
+        restaurantId,
+        transition.from
+      ]
+    );
+
+    if (updateResult.rowCount !== 1) {
+      throw new Error("INVALID_ORDER_TRANSITION");
+    }
+
+    const updatedOrder = updateResult.rows[0];
+
+    // 5. Save event in the same transaction
+    await client.query(
+      `
+      INSERT INTO outbox_events (
+        event_type,
+        aggregate_id,
+        payload
+      )
+      VALUES ($1, $2, $3::jsonb)
+      `,
+      [
+        transition.event,
+        orderId,
+        JSON.stringify({
+          orderId,
+          restaurantId,
+          status: updatedOrder.status
+        })
+      ]
+    );
+
+    await client.query("COMMIT");
+
+    return updatedOrder;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 
 
 export const createRestaurant = async (
@@ -170,3 +312,4 @@ export const updateRestaurant = async (
 
   return result.rows[0] as Restaurant;
 };
+
