@@ -4,11 +4,17 @@ import { errorHandler } from './middlewares/error.middleware.js';
 
 const app = express();
 
-app.use(
-    "/api/v1/payment/webhook",
-    express.raw({ type: "application/json" })
-);
 app.use(express.json());
+app.get('/', (req, res) => {
+  res.status(200).json({ 
+    status: 'success', 
+    message: 'Food Delivery Backend API is running smoothly!' 
+  });
+});
+// app.use(
+//     "/api/v1/payment/webhook",
+//     express.raw({ type: "application/json" })
+// );
 
 app.use("/api/v1", routes);
 
