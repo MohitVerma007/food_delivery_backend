@@ -1,17 +1,21 @@
 import app from './app.js';
 import {env} from './config/env.js';
 import {pool} from './config/db.js';
+import { connectRedis } from './config/redis.js';
 import ngrok from '@ngrok/ngrok';
 
 const startServer = async () => {
     try {
-        await pool.query('SELECT 1'); // Test the database connection
-        // app.listen(env.port, ()=>{
-        //     console.log(`Server is running on port ${env.port}`);
-        // })
+       
+  // 1. Database check
+    await pool.query("SELECT 1");
+    console.log("Database connected successfully");
 
+    // 2. Redis check
+    await connectRedis();
+    console.log("Redis connected successfully");
         app.listen(env.port, async () => {
-  console.log(`Server is running on port ${env.port}`);
+         console.log(`Server is running on port ${env.port}`);
 
   try {
     const forwarder = await ngrok.forward({
