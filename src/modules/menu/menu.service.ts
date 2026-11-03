@@ -1,4 +1,6 @@
 import { pool } from "../../config/db.js";
+import { redis } from "../../config/redis.js";
+
 import type {
   CreateMenuItemInput,
   UpdateMenuItemInput,
@@ -180,6 +182,10 @@ export const updateMenu = async (
     `;
   const result = await pool.query(updateQuery, [...values, menuItemId]);
 
+  // 3. Invalidate cache for the restaurant's menu in Redis
+
+  await redis.del(`restaurant:${existingMenuItem.rows[0].restaurant_id}:menu`);
+
   return result.rows[0];
 };
 
@@ -242,6 +248,21 @@ export const getMenuItemById = async (
 export const getRestaurantMenu = async (
   restaurantId: string
 ): Promise<RestaurantMenu> => {
+
+  const cacheKey = `restaurant:${restaurantId}:menu`;
+
+  // Check if menu is cached in Redis
+  try {
+    const cached = await redis.get(cacheKey);
+    if (cached) {
+      console.log("Menu cache hit for restaurant:", restaurantId);
+      return JSON.parse(cached);
+    }
+  } catch (err) {
+    console.error("Menu cache read failed", err);
+  }
+
+
   const result = await pool.query<RestaurantMenuItemRow>(
     `
       SELECT
@@ -297,6 +318,18 @@ export const getRestaurantMenu = async (
       is_available: item.is_available,
       image_url: item.image_url
     });
+  }
+
+
+  // Cache the menu in Redis for future requests for 5 minutes
+  try {
+    await redis.set(cacheKey, JSON.stringify({
+      restaurantId,
+      categories: Array.from(categoriesMap.values())
+    }), { EX: 300 }); // Cache for 5 minutes
+
+  } catch (err) {
+    console.error("Menu cache write failed", err);
   }
 
   return {
