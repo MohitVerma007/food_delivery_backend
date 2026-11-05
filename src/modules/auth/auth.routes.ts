@@ -8,6 +8,7 @@ import {
   loginSchema,
   registerSchema
 } from "./auth.schema.js";
+import { rateLimit } from "../../middlewares/rate_limit.middleware.js";
 import { authenticate } from "../../middlewares/auth.middleware.js";
 import { authorize } from "../../middlewares/rbac.middleware.js";
 
@@ -21,6 +22,7 @@ router.post(
 
 router.post(
   "/login",
+  rateLimit(3, 60), // Limit to 3 requests per minute
   validate(loginSchema),
   login
 )
