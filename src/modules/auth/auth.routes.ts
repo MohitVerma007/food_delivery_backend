@@ -27,6 +27,6 @@ router.post(
   login
 )
 
-router.get("/",  getUsers)
+router.get("/", rateLimit(3, 60), getUsers)
 
 export default router;
